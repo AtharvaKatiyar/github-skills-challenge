@@ -70,3 +70,48 @@ def test_consumer_receives_event():
     messages = consumer.consume()
 
     assert len(messages) == 1
+
+
+def test_warning_log_is_reported_as_anomaly_reason():
+    detector = AnomalyDetector()
+
+    record = {
+        "timestamp": "2026-09-20T10:10:00",
+        "service": "checkout-service",
+        "response_time_ms": 120,
+        "cpu_percent": 30,
+        "memory_percent": 40,
+        "log_level": "WARNING",
+        "message": "Warning: degraded latency"
+    }
+
+    event = detector.detect(record)
+
+    assert event is not None
+    assert "Error log detected" in event["reasons"]
+
+
+def test_producer_rejects_empty_event():
+    topic = EventTopic("anomaly-events")
+    producer = EventProducer(topic)
+
+    assert producer.publish({}) is False
+    assert topic.get_messages() == []
+
+
+def test_event_topic_clear_removes_messages():
+    topic = EventTopic("anomaly-events")
+    topic.publish({"type": "ANOMALY", "service": "payment-service"})
+
+    topic.clear()
+
+    assert topic.get_messages() == []
+
+
+def test_run_pipeline_processes_service_data():
+    result = run_pipeline("data/service_data.json")
+
+    assert result["records_processed"] == 10
+    assert len(result["anomalies_detected"]) == 2
+    assert result["anomalies_detected"][0]["type"] == "ANOMALY"
+    assert result["events_consumed"] == []
